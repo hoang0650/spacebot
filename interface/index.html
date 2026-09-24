@@ -9,6 +9,33 @@
 	</head>
 	<body>
 		<div id="root"></div>
+		<script>
+			// AI Markets bootstrap: the marketplace opens
+			// `/#token=<api.auth_token>&userId=<id>&autoLogin=true` so the
+			// dashboard is already authenticated when the SPA boots. The token
+			// is moved into localStorage (where the API client reads it) and the
+			// hash is cleared so it never lingers in the address bar/history.
+			(function () {
+				try {
+					var raw = window.location.hash ? window.location.hash.slice(1) : "";
+					if (!raw) return;
+					var params = new URLSearchParams(raw);
+					var token = params.get("token");
+					if (token) {
+						window.localStorage.setItem("spacebot_auth_token", token);
+					}
+					if (params.get("autoLogin") === "true" || token) {
+						window.history.replaceState(
+							null,
+							"",
+							window.location.pathname + window.location.search,
+						);
+					}
+				} catch (error) {
+					// Never block the dashboard on a malformed hash.
+				}
+			})();
+		</script>
 		<script type="module" src="/src/main.tsx"></script>
 	</body>
 </html>
