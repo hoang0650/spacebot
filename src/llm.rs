@@ -4,6 +4,7 @@ pub mod anthropic;
 pub mod history_repair;
 pub mod manager;
 pub mod model;
+pub mod ponytail;
 pub mod pricing;
 pub mod providers;
 pub mod record;

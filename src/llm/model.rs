@@ -334,6 +334,28 @@ fn split_system_prompt(request: &CompletionRequest) -> (String, Vec<&rig::messag
     (request.preamble.clone().unwrap_or_default(), messages)
 }
 
+/// Put shared instructions ahead of the system prompt, in whichever of the two
+/// places `split_system_prompt` reads it from.
+fn prepend_system_prompt(request: &mut CompletionRequest, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    if matches!(request.chat_history.iter().next(), Some(Message::System { .. })) {
+        let mut history: Vec<Message> = request.chat_history.iter().cloned().collect();
+        if let Some(Message::System { content }) = history.first_mut() {
+            content.insert_str(0, &format!("{text}\n\n"));
+        }
+        if let Ok(chat_history) = OneOrMany::many(history) {
+            request.chat_history = chat_history;
+        }
+        return;
+    }
+    request.preamble = Some(match request.preamble.take() {
+        Some(preamble) if !preamble.is_empty() => format!("{text}\n\n{preamble}"),
+        _ => text.to_string(),
+    });
+}
+
 /// True when a block map describes exactly the given preamble.
 ///
 /// The map is produced when the prompt is assembled and the request is built
@@ -391,6 +413,14 @@ impl SpacebotModel {
                 .llm_manager
                 .get_provider(provider_id)
                 .map_err(|error| CompletionError::ProviderError(error.to_string())),
+        }
+    }
+
+    /// Workers do the coding, so only their prompts carry the Ponytail rules;
+    /// channel, cortex and compactor calls would pay for them and never use them.
+    async fn apply_ponytail(&self, request: &mut CompletionRequest) {
+        if self.process_type.as_deref() == Some("worker") {
+            prepend_system_prompt(request, &crate::llm::ponytail::rules().await);
         }
     }
 
@@ -969,6 +999,7 @@ impl CompletionModel for SpacebotModel {
         let start = std::time::Instant::now();
 
         self.repair_request_history(&mut request)?;
+        self.apply_ponytail(&mut request).await;
 
         // Only the clock is taken up front. The request is recorded after the
         // escalation below, which may rewrite and re-send it — the record has
@@ -1148,6 +1179,7 @@ impl CompletionModel for SpacebotModel {
         mut request: CompletionRequest,
     ) -> Result<StreamingCompletionResponse<RawStreamingResponse>, CompletionError> {
         self.repair_request_history(&mut request)?;
+        self.apply_ponytail(&mut request).await;
         // Streaming has no fallback chain, so this model is the one that
         // receives the request and the one a refusal belongs to.
         let sent_tokens = self.enforce_context_ceiling(&mut request);
@@ -4735,6 +4767,28 @@ mod tests {
 
         assert!(system.is_empty());
         assert_eq!(messages.len(), 2);
+    }
+
+    #[test]
+    fn prepend_system_prompt_lands_wherever_the_prompt_lives() {
+        let mut leading = request_with(
+            vec![Message::system("# Orion"), Message::from("hello")],
+            None,
+        );
+        prepend_system_prompt(&mut leading, "RULES");
+        let (system, messages) = split_system_prompt(&leading);
+        assert_eq!(system, "RULES\n\n# Orion");
+        assert_eq!(messages.len(), 1);
+
+        let mut field = request_with(vec![Message::from("hello")], Some("# Orion"));
+        prepend_system_prompt(&mut field, "RULES");
+        assert_eq!(field.preamble.as_deref(), Some("RULES\n\n# Orion"));
+
+        let mut neither = request_with(vec![Message::from("hello")], None);
+        prepend_system_prompt(&mut neither, "");
+        assert!(neither.preamble.is_none());
+        prepend_system_prompt(&mut neither, "RULES");
+        assert_eq!(neither.preamble.as_deref(), Some("RULES"));
     }
 
     #[test]
