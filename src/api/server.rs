@@ -400,23 +400,71 @@ async fn api_auth_middleware(
     request: Request,
     next: Next,
 ) -> Response {
-    let Some(expected_token) = state.auth_token.as_deref() else {
-        return next.run(request).await;
-    };
-
     let path = request.uri().path();
     if path == "/api/health" || path == "/health" {
         return next.run(request).await;
     }
 
-    let is_authorized = request
+    let presented = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
-        .is_some_and(|token| token == expected_token);
+        .unwrap_or("")
+        .trim();
 
-    if is_authorized {
+    if let Some(secret) = super::tenant_auth::tenant_secret() {
+        let host = request
+            .headers()
+            .get("x-forwarded-host")
+            .or_else(|| request.headers().get(header::HOST))
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("");
+        let host_uid = super::tenant_auth::user_id_from_host(host);
+        if let Some(locked) = super::tenant_auth::tenant_id() {
+            if host_uid.as_deref().is_some_and(|uid| uid != locked) {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({"error": "This SpaceBot instance belongs to another account."})),
+                )
+                    .into_response();
+            }
+            let expected = super::tenant_auth::dashboard_token(&secret, &locked);
+            if super::tenant_auth::tokens_equal(presented, &expected) {
+                return next.run(request).await;
+            }
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "unauthorized"})),
+            )
+                .into_response();
+        }
+        let Some(uid) = host_uid else {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "SpaceBot tenant host required"})),
+            )
+                .into_response();
+        };
+        let expected = super::tenant_auth::dashboard_token(&secret, &uid);
+        if super::tenant_auth::tokens_equal(presented, &expected) {
+            return next.run(request).await;
+        }
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "unauthorized"})),
+        )
+            .into_response();
+    }
+
+    let Some(expected_token) = state.auth_token.as_deref() else {
+        return next.run(request).await;
+    };
+
+    if !expected_token.is_empty()
+        && presented.len() == expected_token.len()
+        && super::tenant_auth::tokens_equal(presented, expected_token)
+    {
         next.run(request).await
     } else {
         (

@@ -35,6 +35,7 @@ mod skills;
 pub(crate) mod ssh;
 mod state;
 mod system;
+mod tenant_auth;
 pub mod tasks;
 mod tools;
 pub mod usage;
