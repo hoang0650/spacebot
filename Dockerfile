@@ -1,6 +1,8 @@
 # ---- Builder stage ----
 # Compiles the React frontend and the Rust binary with the frontend embedded.
-FROM rust:bookworm AS builder
+# Pinned to rust-toolchain.toml / CI. `rust:bookworm` floats and will not
+# match the compiler the repo is tested with.
+FROM rust:1.97.1-bookworm AS builder
 
 # Install build dependencies:
 #   protobuf-compiler — LanceDB protobuf codegen
@@ -23,6 +25,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 
 WORKDIR /build
 
+# rustup in the official image follows this file, so a later toolchain bump
+# still overrides the image tag above.
+COPY rust-toolchain.toml ./
+
 # 1. Fetch and cache Rust dependencies.
 #    cargo fetch needs a valid target, so we create stubs that get replaced later.
 COPY Cargo.toml Cargo.lock ./
@@ -32,9 +38,9 @@ RUN mkdir -p src/bin && echo "fn main() {}" > src/main.rs && touch src/lib.rs \
     && cargo build --release --features metrics \
     && rm -rf src
 
-# 2. Install frontend dependencies.
-COPY interface/package.json interface/
-RUN cd interface && bun install
+# 2. Install frontend dependencies from the lockfile.
+COPY interface/package.json interface/bun.lock interface/
+RUN cd interface && bun install --frozen-lockfile
 
 # 3. Build the OpenCode embed bundle (live coding UI in Workers tab).
 #    Must run before the frontend build so the embed assets in
