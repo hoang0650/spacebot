@@ -340,7 +340,10 @@ fn prepend_system_prompt(request: &mut CompletionRequest, text: &str) {
     if text.is_empty() {
         return;
     }
-    if matches!(request.chat_history.iter().next(), Some(Message::System { .. })) {
+    if matches!(
+        request.chat_history.iter().next(),
+        Some(Message::System { .. })
+    ) {
         let mut history: Vec<Message> = request.chat_history.iter().cloned().collect();
         if let Some(Message::System { content }) = history.first_mut() {
             content.insert_str(0, &format!("{text}\n\n"));
