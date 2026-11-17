@@ -36,6 +36,7 @@
             ./migrations
             ./prompts
             ./presets
+            ./skills
             ./docs/content
             ./docs/README.md
             ./docs/docker.md

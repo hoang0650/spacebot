@@ -48,7 +48,8 @@ impl PonytailRules {
             "compact".to_string()
         };
         let base = url.trim().trim_end_matches('/');
-        let url = (!base.is_empty() && mode != "off").then(|| format!("{base}/v1/rules?mode={mode}"));
+        let url =
+            (!base.is_empty() && mode != "off").then(|| format!("{base}/v1/rules?mode={mode}"));
         Self {
             url,
             client: reqwest::Client::builder()
@@ -60,7 +61,9 @@ impl PonytailRules {
     }
 
     fn lock(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     async fn get(&'static self) -> String {
@@ -69,8 +72,7 @@ impl PonytailRules {
         };
         let (text, due) = {
             let mut state = self.lock();
-            let due = !state.refreshing
-                && state.next_refresh.is_none_or(|at| Instant::now() >= at);
+            let due = !state.refreshing && state.next_refresh.is_none_or(|at| Instant::now() >= at);
             if due {
                 state.refreshing = true;
             }
@@ -143,20 +145,30 @@ mod tests {
     #[test]
     fn disabled_without_a_url_or_when_off() {
         assert!(PonytailRules::new("", "compact").url.is_none());
-        assert!(PonytailRules::new("http://ponytail:8787", "off").url.is_none());
+        assert!(
+            PonytailRules::new("http://ponytail:8787", "off")
+                .url
+                .is_none()
+        );
         assert_eq!(
-            PonytailRules::new("http://ponytail:8787/", "FULL").url.as_deref(),
+            PonytailRules::new("http://ponytail:8787/", "FULL")
+                .url
+                .as_deref(),
             Some("http://ponytail:8787/v1/rules?mode=full")
         );
         assert_eq!(
-            PonytailRules::new("http://ponytail:8787", "bogus").url.as_deref(),
+            PonytailRules::new("http://ponytail:8787", "bogus")
+                .url
+                .as_deref(),
             Some("http://ponytail:8787/v1/rules?mode=compact")
         );
     }
 
     #[tokio::test]
     async fn fetches_once_then_serves_the_cache() {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
         let port = listener.local_addr().expect("addr").port();
         let hits = Arc::new(AtomicUsize::new(0));
         let served = hits.clone();
@@ -187,10 +199,17 @@ mod tests {
             let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
             listener.local_addr().expect("addr").port()
         };
-        let rules = leak(PonytailRules::new(&format!("http://127.0.0.1:{port}"), "lite"));
+        let rules = leak(PonytailRules::new(
+            &format!("http://127.0.0.1:{port}"),
+            "lite",
+        ));
         assert_eq!(rules.get().await, "");
         let state = rules.lock();
         assert!(!state.refreshing);
-        assert!(state.next_refresh.is_some_and(|at| at > Instant::now() + RETRY / 2));
+        assert!(
+            state
+                .next_refresh
+                .is_some_and(|at| at > Instant::now() + RETRY / 2)
+        );
     }
 }

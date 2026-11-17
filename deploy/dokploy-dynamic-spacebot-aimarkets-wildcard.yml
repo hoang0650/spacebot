@@ -3,8 +3,11 @@
 # Production is one container + one volume per buyer:
 #   SPACEBOT_TENANT_ID=<userId>
 #   SPACEBOT_TENANT_SECRET=<API SPACEBOT_DASHBOARD_TOKEN_SEED or AIMARKETS_SERVICE_SECRET>
+# Image from .github/workflows/docker-dokploy.yml (set on the Dokploy service,
+# not in this router file): ghcr.io/<github-owner>/spacebot:latest
 # Copy this router for each buyer. Replace USER_ID and the service URL (port 19898).
 # passHostHeader must stay on so the process can reject another buyer's token.
+# `redirect-to-https` is not defined here; the Traefik instance must already provide it.
 
 http:
   routers:

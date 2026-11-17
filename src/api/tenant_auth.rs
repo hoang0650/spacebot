@@ -19,7 +19,11 @@ pub fn tenant_secret() -> Option<String> {
         .or_else(|_| std::env::var("AIMARKETS_SERVICE_SECRET"))
         .unwrap_or_default();
     let secret = raw.trim().to_string();
-    if secret.is_empty() { None } else { Some(secret) }
+    if secret.is_empty() {
+        None
+    } else {
+        Some(secret)
+    }
 }
 
 pub fn tenant_id() -> Option<String> {
@@ -37,11 +41,18 @@ pub fn user_id_from_host(host: &str) -> Option<String> {
     let host = host.split(',').next()?.trim().to_ascii_lowercase();
     let host = host.split(':').next()?.trim();
     let label = host.split('.').next()?.trim();
-    if is_user_id(label) { Some(label.to_string()) } else { None }
+    if is_user_id(label) {
+        Some(label.to_string())
+    } else {
+        None
+    }
 }
 
 pub fn dashboard_token(secret: &str, user_id: &str) -> String {
-    let mut mac = hmac_sha256(secret.as_bytes(), format!("spacebot-dashboard:v1:{user_id}").as_bytes());
+    let mut mac = hmac_sha256(
+        secret.as_bytes(),
+        format!("spacebot-dashboard:v1:{user_id}").as_bytes(),
+    );
     let hex = hex::encode(mac);
     mac.fill(0);
     hex.chars().take(48).collect()
@@ -105,6 +116,9 @@ mod tests {
             Some("6a69f0cdd7faa829b87a852e".into())
         );
         assert_eq!(user_id_from_host("SpaceBot.aimarkets.vn"), None);
-        assert_eq!(user_id_from_host("6a69f0cdd7faa829b87a852e.spacebot.aimarkets.vn:443"), Some("6a69f0cdd7faa829b87a852e".into()));
+        assert_eq!(
+            user_id_from_host("6a69f0cdd7faa829b87a852e.spacebot.aimarkets.vn:443"),
+            Some("6a69f0cdd7faa829b87a852e".into())
+        );
     }
 }
